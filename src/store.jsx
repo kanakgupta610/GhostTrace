@@ -9,7 +9,9 @@ const Ctx = createContext(null)
 
 // Live Ethereum backend (server/index.js) used for cases created from a real address. In development it
 // defaults to the local server; set VITE_LIVE_API_URL for a deployed one. Settings → Data source overrides it.
-const DEFAULT_LIVE_API = import.meta.env.VITE_LIVE_API_URL || (import.meta.env.DEV ? 'http://localhost:8787/api' : '')
+// All GhostTrace backend routes live under /api, so a base URL given without it (e.g. https://host.onrender.com) gets it added.
+const withApi = (u) => (!u ? '' : /\/api\/?$/.test(u) ? u.replace(/\/+$/, '') : u.replace(/\/+$/, '') + '/api')
+const DEFAULT_LIVE_API = withApi(import.meta.env.VITE_LIVE_API_URL) || (import.meta.env.DEV ? 'http://localhost:8787/api' : '')
 const isLiveCapable = (c) => !!(c && c.userCreated && !c.sample && c.seed)
 export const useApp = () => useContext(Ctx)
 

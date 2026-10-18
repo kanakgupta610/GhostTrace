@@ -41,7 +41,8 @@ export function createServer(env = process.env) {
   const ratePerMin = num(env.RATE_LIMIT_PER_MIN, 20)
   const cacheTtl = num(env.CACHE_TTL_MS, 120000)
   // Any local dev origin (localhost / 127.0.0.1, any port) plus ALLOWED_ORIGINS (comma-separated) for deployments.
-  const origins = new Set((env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean))
+  // The deployed GhostTrace frontend is allowed by default; ALLOWED_ORIGINS adds more (comma-separated).
+  const origins = new Set(['https://ghosttrace-sand.vercel.app', ...(env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)])
   const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
   const allowed = (o) => origins.has(o) || (env.ALLOW_LOCAL_ORIGINS !== 'false' && LOCAL_ORIGIN.test(o))
   const cache = new Map() // address -> { at, body }
