@@ -195,7 +195,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const [k, v] of Object.entries(process.env)) if (k.startsWith('VITE_') && /etherscan|blockscout|explorer|secret|write_token|github_token/i.test(k) && v) {
     console.error(`✖ ${k} is set. VITE_ variables are shipped to the browser; use ETHERSCAN_API_KEY or BLOCKSCOUT_API_KEY (no VITE_ prefix) instead.`); process.exit(1)
   }
-  const port = num(process.env.PORT, 8787), host = process.env.HOST || '127.0.0.1'
+  // Hosted platforms (Render sets RENDER=true and PORT) need 0.0.0.0 so the platform can reach the server;
+  // local development stays on 127.0.0.1. HOST overrides both.
+  const hosted = !!process.env.RENDER || process.env.NODE_ENV === 'production'
+  const port = num(process.env.PORT, 8787), host = process.env.HOST || (hosted ? '0.0.0.0' : '127.0.0.1')
   const chain = providerChain()
-  createServer().listen(port, host, () => console.log(`GhostTrace API on http://${host === '127.0.0.1' ? 'localhost' : host}:${port}/api  (providers: ${chain.map((p) => p.name + (p.secret ? ' [key from server env]' : '')).join(' → ')})`))
+  createServer().listen(port, host, () => console.log(`GhostTrace API listening on ${host}:${port} (${host === '127.0.0.1' ? `http://localhost:${port}/api` : 'all interfaces, /api'})  (providers: ${chain.map((p) => p.name + (p.secret ? ' [key from server env]' : '')).join(' → ')})`))
 }
