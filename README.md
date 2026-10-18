@@ -60,7 +60,10 @@ npm test           # backend tests (mocked upstream, no network)
 
 ## Evidence, cross-chain checks and pricing
 
-- **Manual evidence:** Evidence → *Add evidence*. Saved through `POST /api/evidence`, validated on the server, deduplicated and labelled "Manually entered".
+- **Manual evidence:** OSINT Evidence → *Add Evidence* (also from the wallet inspector). Saved through `POST /api/evidence`, validated on the server, deduplicated and labelled "Manually entered".
+- **Write access:** adding or removing evidence requires `EVIDENCE_WRITE_TOKEN` (24+ characters) in `.env.local`. Investigators enter it once in the form; it stays in that browser and is sent as `Authorization: Bearer`. Without it, evidence writes are disabled.
+- **Older local evidence:** `npm run migrate-evidence` (dry run), then `npm run migrate-evidence -- --apply` inserts local records missing from Supabase; it never overwrites, deletes or modifies the local file. `--skip-manual` leaves manual entries out.
+- **Smoke test:** with the app and backend running, `npm run smoke` (sample path) or `npm run smoke -- --live 0x…` checks cases, graph, ledger, OSINT Evidence and PDF export in headless Chrome.
 - **Storage:** with `SUPABASE_SECRET_KEY` in `.env.local` (server only, never `VITE_`) and `supabase/evidence-records.sql` applied, manual and external evidence persist in the `evidence_records` table. RLS gives the publishable key no access to it. Without the key, evidence is saved to `server/data/evidence-store.json`; `/api/health` reports which is in use.
 - **Cross-chain:** Risk → Bridges & mixers → *Check destination chain* (`GET /api/bridge-trace?tx=`). Ethereum → OP Mainnet ETH deposits through the standard bridge are matched by exact amount, recipient and the L2 standard-bridge sender within 60 minutes. Base needs `ETHERSCAN_API_KEY`; other bridges are reported as unconfirmed.
 - **Pricing:** live ETH/WETH values use DefiLlama's daily close for the transfer day. Any value at today's price is marked "≈ today" and counted in the ledger note.
