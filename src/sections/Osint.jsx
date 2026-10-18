@@ -11,6 +11,21 @@ import { fmtTime, sha256, copyText } from '../lib/util.js'
 // an investigator's own entry, or the case's data source.
 const ORIGIN = { sample: ['Fictional sample source', 'lilac'], external: ['External source', 'teal'], manual: ['Manually entered', 'copper'], case: ['Case data', ''] }
 const originOf = (o, c) => ORIGIN[o.origin || (c.sample ? 'sample' : 'case')] || ORIGIN.case
+// Short verification statement for a finding card, from the finding's own fields.
+const verificationOf = (o, c) => {
+  if (o.origin === 'manual') return `${o.reliability || 'Not stated'} (entered manually)`
+  if (o.origin === 'external') return o.sourceKind === 'sanctions' ? 'Mirror of the OFAC list; confirm on the official OFAC search' : o.sourceKind === 'threat-list' ? 'Community scam list; not independently verified' : 'Public mention; context not verified'
+  if (c.sample) return `Fictional sample source · ${o.reliability || 'reliability not stated'}`
+  return o.reliability || 'Not stated'
+}
+// Link to the original source when it is a real, reachable URL; otherwise say why there is none.
+const sourceLink = (o, c) => {
+  const u = o.url || ''
+  if (!u) return 'No source URL recorded'
+  if (/\.example([/:]|$)/.test(u) || c.sample) return 'Fictional source (reserved .example domain), no live link'
+  if (!/^https?:\/\//.test(u)) return 'Source reference: ' + u
+  return <a href={u} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}><ExternalLink size={12} style={{ verticalAlign: -2 }} /> Original source ({(() => { try { return new URL(u).host } catch { return 'link' } })()})</a>
+}
 const SRC_NAME = { ofac: 'OFAC list mirror', scamsniffer: 'ScamSniffer', github: 'GitHub search' }
 
 function ExternalStatus({ st }) {
@@ -76,13 +91,17 @@ export default function Osint() {
           </div>
           <div className="finding-grid">
             {list.map((x, i) => (
-              <button key={x.id} className="finding" onClick={() => setSel(x.id)} style={{ animationDelay: `${i * 0.04}s` }}>
+              <div key={x.id} className="finding" role="button" tabIndex={0} onClick={() => setSel(x.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSel(x.id) } }} style={{ animationDelay: `${i * 0.04}s`, cursor: 'pointer' }}>
                 <div className="spread"><span className="mono dim">{x.id} · {x.sourceType}</span><span className={`conf ${x.confidence}`}>{x.confidence}</span></div>
                 <b className="finding-title">{x.title}</b>
-                <span className={`pill ${originOf(x, c)[1]}`} style={{ alignSelf: 'flex-start' }}>{originOf(x, c)[0]}</span>
-                <div className="row" style={{ gap: 6 }}>{x.matches.map((m) => <span key={m.address} className="pill"><CatDot cat={analysis.idx.byAddr.get(m.address)?.category} size={7} />{analysis.idx.byAddr.get(m.address)?.label}</span>)}</div>
-                <span className="dim finding-foot">{fmtTime(x.published, false)}<ArrowRight size={14} /></span>
-              </button>
+                <div className="row" style={{ gap: 6 }}><span className={`pill ${originOf(x, c)[1]}`}>{originOf(x, c)[0]}</span><span className="dim" style={{ fontSize: 12 }}>{x.publisher}</span></div>
+                <div style={{ fontSize: 12 }}><span className="dim">Matched address: </span>{x.matches.length ? x.matches.map((m) => <span key={m.address} className="pill" style={{ marginRight: 4 }}><CatDot cat={analysis.idx.byAddr.get(m.address)?.category} size={7} /><span className="mono">{short(m.address)}</span>{analysis.idx.byAddr.get(m.address)?.label ? ` · ${analysis.idx.byAddr.get(m.address).label}` : ''}</span>) : <span className="dim">not linked to a specific wallet</span>}</div>
+                <div className="dim" style={{ fontSize: 12 }}><span>Verification: </span>{verificationOf(x, c)}</div>
+                <div className="spread finding-foot">
+                  <span className="dim" style={{ fontSize: 12 }}>{sourceLink(x, c)}</span>
+                  <span className="dim">{fmtTime(x.published, false)}<ArrowRight size={14} style={{ verticalAlign: -3 }} /></span>
+                </div>
+              </div>
             ))}
             {!list.length && <div className="empty">No findings match.</div>}
           </div>

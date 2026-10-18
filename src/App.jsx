@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { LayoutDashboard, FolderSearch, Waypoints, FileSearch, ShieldAlert, FileText, Search, RefreshCw, Settings, Ghost, Plus, Wallet, ArrowLeftRight, FlaskConical } from 'lucide-react'
+import { LayoutDashboard, FolderSearch, Waypoints, FileSearch, ShieldAlert, FileText, Search, RefreshCw, Settings, Ghost, Plus, Wallet, ArrowLeftRight, FlaskConical, Clock, Boxes, Fingerprint, Route } from 'lucide-react'
 import { useApp, JOURNEY } from './store.jsx'
 import { Toast, Modal, CatDot, Risk, TipLayer } from './components/common.jsx'
 import Hero from './sections/Hero.jsx'
@@ -22,7 +22,11 @@ const NAV_GROUPS = [
     { id: 'osint', label: 'OSINT Evidence', tip: 'Public-source (OSINT) and manually entered evidence linked to wallets', icon: FileSearch },
   ] },
   { label: 'Analyse', items: [
-    { id: 'risk', label: 'Risk', tip: 'Why wallets were flagged', icon: ShieldAlert },
+    { id: 'risk', sub: 'scores', label: 'Risk breakdown', tip: 'Every wallet ranked, with the factors behind its score', icon: ShieldAlert },
+    { id: 'risk', sub: 'timing', label: 'Timing patterns', tip: 'Time gaps between transfers and rapid-transfer findings', icon: Clock },
+    { id: 'risk', sub: 'clusters', label: 'Wallet clusters', tip: 'Wallets grouped by a stated method or by transaction relationships, and why', icon: Boxes },
+    { id: 'risk', sub: 'identity', label: 'Identity matches', tip: 'Candidate identities, only where a source names the exact address', icon: Fingerprint },
+    { id: 'risk', sub: 'services', label: 'Cross-chain tracing', tip: 'Bridges and mixers, confirmed Ethereum → Optimism matches and where tracing stops', icon: Route },
   ] },
   { label: 'Case', items: [
     { id: 'overview', label: 'Overview', tip: 'Headline numbers and walkthrough', icon: LayoutDashboard },
@@ -33,7 +37,9 @@ const NAV_GROUPS = [
 const NAV = NAV_GROUPS.flatMap((g) => g.items)
 
 export default function App() {
-  const { section, setSection, active, cases, setActiveId, refresh, refreshing, dataSource, lastRefresh, db, journey, setSelection, evidenceForm, closeEvidenceForm } = useApp()
+  const { section, setSection, sub, active, cases, setActiveId, refresh, refreshing, dataSource, lastRefresh, db, journey, setSelection, evidenceForm, closeEvidenceForm } = useApp()
+  // Risk sub-views are listed as their own items; the Risk page opens on 'scores' when no sub-view is set
+  const isOn = (n) => section === n.id && (!n.sub || (sub || 'scores') === n.sub)
   const liveHost = active.live && active.liveSource ? new URL(active.liveSource).host : null
   const fromDb = !liveHost && !dataSource.url && db.state === 'ok' && db.count > 0
   const [settings, setSettings] = useState(false)
@@ -53,7 +59,7 @@ export default function App() {
           <div className="nav-group" key={g.label}>
             <div className="nav-group-label">{g.label}</div>
             {g.items.map((n) => (
-              <button key={n.id} className={`nav-item ${section === n.id ? 'on' : ''}`} onClick={() => setSection(n.id)} aria-current={section === n.id ? 'page' : undefined} data-tip={n.tip}>
+              <button key={n.id + (n.sub || '')} className={`nav-item ${isOn(n) ? 'on' : ''}`} onClick={() => setSection(n.id, null, n.sub || null)} aria-current={isOn(n) ? 'page' : undefined} data-tip={n.tip}>
                 <n.icon size={17} /><span>{n.label}</span>{n.id === 'osint' && active.osint.length > 0 && <span className="n" style={{ marginLeft: 'auto', width: 'auto' }}>{active.osint.length}</span>}
               </button>
             ))}
@@ -86,7 +92,7 @@ export default function App() {
       </header>
 
       <nav className="mobile-nav" aria-label="Sections">
-        {NAV.map((n) => <button key={n.id} className={`nav-item ${section === n.id ? 'on' : ''}`} onClick={() => setSection(n.id)}><n.icon size={15} />{n.label}</button>)}
+        {NAV.map((n) => <button key={n.id + (n.sub || '')} className={`nav-item ${isOn(n) ? 'on' : ''}`} onClick={() => setSection(n.id, null, n.sub || null)}><n.icon size={15} />{n.label}</button>)}
       </nav>
 
       <main className="main" id="main"><ScanBeam trigger={section + active.id} />{Section && <Section key={section} />}</main>

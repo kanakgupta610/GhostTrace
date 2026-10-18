@@ -68,6 +68,25 @@ export default function Reports() {
   }
 
   const on = (id) => sections.includes(id)
+  // what each section will contain, from the same report model the PDF uses
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`
+  const idMatches = m.extra ? m.extra.identity.reduce((k, x) => k + x.m.candidates.length, 0) : 0
+  const sectionInfo = {
+    summary: `${plural(c.wallets.length, 'wallet')}, ${plural(c.txs.length, 'transfer')}`,
+    facts: m.extra ? `${m.extra.observed.length} facts · ${m.extra.inferred.length} inferences · ${m.extra.hypotheses.length} hypotheses` : '',
+    timeline: m.extra ? plural(m.extra.timeline.length, 'event') : '',
+    graph: 'graph image',
+    findings: m.flagged.length ? plural(m.flagged.length, 'flagged wallet') : 'no wallet above 40',
+    txs: plural(m.txs.length, 'row'),
+    evidence: c.osint.length ? plural(c.osint.length, 'finding') : 'none',
+    clusters: c.clusters.length ? plural(c.clusters.length, 'stated cluster') : 'none stated',
+    inferred: analysis.inferred.clusters.length ? plural(analysis.inferred.clusters.length, 'cluster') : 'none met the threshold',
+    services: analysis.services.events.length ? plural(analysis.services.events.length, 'interaction') : 'none',
+    identity: idMatches ? plural(idMatches, 'candidate') : 'no reliable match',
+    methodology: plural(m.methodology.length, 'item'),
+    limitations: plural(m.limitations.length, 'item'),
+    appendix: `${c.wallets.length} address${c.wallets.length === 1 ? '' : 'es'}`,
+  }
   let n = 0
   return (
     <div className="page">
@@ -81,8 +100,10 @@ export default function Reports() {
               <select id="rp-case" className="input" value={c.id} onChange={(e) => setActiveId(e.target.value)}>{cases.map((x) => <option key={x.id} value={x.id}>{x.id} · {x.title}</option>)}</select></div>
             <div className="field"><label htmlFor="rp-title">Report title</label><input id="rp-title" className="input" placeholder={c.title} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
             <div className="field"><label htmlFor="rp-analyst">Analyst name</label><input id="rp-analyst" className="input" placeholder="Shown on the cover" value={analyst} onChange={(e) => setAnalyst(e.target.value)} /></div>
-            <div className="field"><span className="lbl">Sections</span>
-              {SECTIONS.map((s) => <label key={s.id} className="check"><input type="checkbox" checked={on(s.id)} onChange={() => toggle(s.id)} />{s.label}</label>)}
+            <div className="field"><span className="lbl">Sections in the PDF</span>
+              <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>The PDF prints the checked sections in this order, exactly as the preview shows. Counts are what each section will contain.</div>
+              {SECTIONS.map((s) => <label key={s.id} className="check"><input type="checkbox" checked={on(s.id)} onChange={() => toggle(s.id)} />{s.label}<span className="dim" style={{ fontSize: 11.5, marginLeft: 6 }}>{sectionInfo[s.id] || ''}</span></label>)}
+              <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>{sections.length} of {SECTIONS.length} sections included{c.sample ? ' · marked SAMPLE DATASET on every page' : ''}</div>
             </div>
             <label className="check"><input type="checkbox" checked={useFilters} onChange={(e) => setUseFilters(e.target.checked)} />Graph uses the workspace filters ({gs.visible.length} wallets)</label>
             <button className="btn primary" onClick={pdf} disabled={busy || !sections.length}>{busy ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}Export PDF</button>

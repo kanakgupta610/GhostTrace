@@ -67,7 +67,7 @@ async function main() {
     check('ledger lists transfers', rows > 0, `${rows} rows`)
     check('"OSINT Evidence" navigation item present', await nav('OSINT Evidence'))
     await sleep(1500)
-    const findings = await waitFor(`document.querySelectorAll('button.finding').length || null`, 8000)
+    const findings = await waitFor(`document.querySelectorAll('.finding').length || null`, 8000)
     check('OSINT Evidence page lists findings', findings > 0, `${findings || 0} findings`)
     check('Add Evidence button present', !!(await ev(`[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Add Evidence')`)))
 

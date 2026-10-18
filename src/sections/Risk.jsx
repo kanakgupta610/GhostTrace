@@ -8,6 +8,7 @@ import { fmtUsdShort, fmtDuration, SERVICE_CATS, short } from '../lib/analysis.j
 import { fmtTime, fmtDay, fmtClock } from '../lib/util.js'
 import { fmtDelta } from '../lib/timing.js'
 import { candidateMatches, IDENTITY_METHOD, NO_MATCH } from '../lib/identity.js'
+import { knownService } from '../lib/services.js'
 
 export const WEIGHTS = [
   ['Received incident proceeds', 'Up to 30', 'Share of received value traced to the incident, haircut method'],
@@ -55,12 +56,13 @@ export default function RiskAnalytics() {
       </div>
 
       <div className="subtabs" role="tablist" aria-label="Risk views">
-        {[['scores', 'Scores', 'Every wallet ranked, with the reasons behind its score'], ['timing', 'Timing', 'How fast funds moved between wallets'], ['clusters', 'Clusters', 'Wallets grouped by a stated method or by transaction relationships'], ['identity', 'Identity', 'Candidate identities, only where a source names the address'], ['services', 'Bridges & mixers', 'Where funds met bridges or mixers, and where tracing stops'], ['patterns', 'Patterns', 'Laundering behaviours and how scoring works']].map(([id, l, tip]) => (
+        {[['scores', 'Risk breakdown', 'Every wallet ranked, with the factors behind its score'], ['timing', 'Timing patterns', 'Time gaps between transfers and rapid-transfer findings'], ['clusters', 'Wallet clusters', 'Wallets grouped by a stated method or by transaction relationships'], ['identity', 'Identity matches', 'Candidate identities, only where a source names the address'], ['services', 'Cross-chain tracing', 'Bridges and mixers, confirmed Ethereum → Optimism matches, and where tracing stops'], ['patterns', 'Patterns', 'Laundering behaviours and how scoring works']].map(([id, l, tip]) => (
           <button key={id} role="tab" aria-selected={tab === id} className={`subtab ${tab === id ? 'on' : ''}`} onClick={() => setSub(id)} data-tip={tip}>{l}</button>
         ))}
       </div>
 
       <div className="subpage" key={tab}>
+      {tab === 'scores' && <div className="note" style={{ marginBottom: 14 }}>Each wallet's risk score is the sum of the factor points listed for it (capped at 100); select a wallet to see its breakdown. Factors are heuristic indicators computed from this case's transfers, clusters and evidence. A score is a lead for investigation, not proof of wrongdoing; service wallets (exchanges, bridges, mixers) are scored for exposure, not culpability. The full weights table is under Patterns → Scoring method.</div>}
       {tab === 'scores' && (
       <div className="grid g-main">
         <div className="card">
@@ -108,8 +110,9 @@ export default function RiskAnalytics() {
         </div>
       </div>
       )}
+      {tab === 'timing' && <TimingPatterns analysis={analysis} name={name} showTxs={showTxs} />}
       {tab === 'timing' && (
-      <div className="grid g-2">
+      <div className="grid g-2" style={{ marginTop: 16 }}>
         <div className="card">
           <div className="card-h"><h2>Time held before forwarding</h2><span className="dim" style={{ fontSize: 12 }}>Receipt to next send, non-service wallets</span></div>
           <div className="card-b" style={{ height: 250 }}>
@@ -142,7 +145,7 @@ export default function RiskAnalytics() {
         </div>
       </div>
       )}
-      {tab === 'timing' && <TimingPatterns analysis={analysis} name={name} showTxs={showTxs} />}
+      {tab === 'clusters' && <div className="note" style={{ marginBottom: 14 }}><b>Stated clusters</b> come from the case record{c.sample ? ' (fictional sample data)' : ''}, each with the method an investigator used. <b>Inferred clusters</b> below are computed by GhostTrace from transaction relationships, and each wallet lists the links that put it there. Neither proves that the wallets share an owner.</div>}
       {tab === 'clusters' && (
       <div className="card">
         <div className="card-h"><h2>Stated clusters</h2><button className="btn sm" onClick={() => { updateGraph((g) => ({ ...g, filters: { ...g.filters, showClusters: true }, visible: [...new Set([...g.visible, ...c.clusters.flatMap((x) => x.members)])] })); openCase(c.id, 'graph') }}><Boxes size={13} />Show clusters in graph</button></div>
@@ -208,10 +211,11 @@ function TimingPatterns({ analysis, name, showTxs }) {
   const d = analysis.deltas
   const iss = d.issues
   const dataNote = [iss.missingTimestamp && `${iss.missingTimestamp} without a timestamp (excluded)`, iss.duplicates && `${iss.duplicates} duplicate${iss.duplicates > 1 ? 's' : ''} removed`, iss.outOfOrder && `${iss.outOfOrder} out of order (re-sorted)`].filter(Boolean)
+  const fastest = [...d.forwards].sort((a, b) => a.ms - b.ms).slice(0, 12)
   return (
-    <div className="stack" style={{ gap: 16, marginTop: 16 }}>
+    <div className="stack" style={{ gap: 16 }}>
       <div className="card">
-        <div className="card-h"><h2>Time-delta patterns</h2><span className="dim" style={{ fontSize: 12 }}>{d.stats.forwards} receipt-to-forward delays · median {d.stats.medianMs == null ? '—' : fmtDelta(d.stats.medianMs)} · 90th percentile {d.stats.p90Ms == null ? '—' : fmtDelta(d.stats.p90Ms)}</span></div>
+        <div className="card-h"><h2>Rapid-transfer findings</h2><span className="dim" style={{ fontSize: 12 }}>{d.stats.forwards} receipt-to-forward delays · median {d.stats.medianMs == null ? '—' : fmtDelta(d.stats.medianMs)} · 90th percentile {d.stats.p90Ms == null ? '—' : fmtDelta(d.stats.p90Ms)}</span></div>
         <div className="card-b feed">
           {d.chains.map((ch) => (
             <div className="feed-item" key={ch.wallets.join('>')} style={{ gridTemplateColumns: '1fr auto' }}>
@@ -233,6 +237,24 @@ function TimingPatterns({ analysis, name, showTxs }) {
           <div className="dim" style={{ fontSize: 12 }}>Data quality: {d.stats.transfers} timestamped transfers{dataNote.length ? `; ${dataNote.join('; ')}` : '; no missing, duplicate or out-of-order records'}. All times are UTC block timestamps.</div>
           <div className="note" style={{ fontSize: 12, marginTop: 8 }}>A short delay is a timing observation. It does not show that the wallets share an owner or that anything unlawful happened.</div>
         </div>
+      </div>
+      <div className="card">
+        <div className="card-h"><h2>Shortest time gaps</h2><span className="dim" style={{ fontSize: 12 }}>Receipt → next outgoing transfer, fastest first · services excluded</span></div>
+        <div className="card-b table-wrap" style={{ maxHeight: 340 }}>
+          {fastest.length ? (
+            <table className="t">
+              <thead><tr><th>Wallet</th><th className="r">Time gap</th><th>Received</th><th>Forwarded</th><th></th></tr></thead>
+              <tbody>{fastest.map((f) => (
+                <tr key={f.inTx + f.outTx} onClick={() => showTxs([f.inTx, f.outTx])}>
+                  <td>{name(f.wallet)}</td><td className="r num">{fmtDelta(f.ms)}</td>
+                  <td className="mono dim">{fmtTime(d.events.find((t) => t.id === f.inTx)?.ts, true).replace(' UTC', '')}</td>
+                  <td className="mono dim">{fmtTime(d.events.find((t) => t.id === f.outTx)?.ts, true).replace(' UTC', '')}</td>
+                  <td><span className={`pill ${f.ms <= d.thresholds.rapidMs ? 'copper' : ''}`}>{f.ms <= d.thresholds.rapidMs ? 'rapid' : 'not rapid'}</span></td>
+                </tr>))}</tbody>
+            </table>
+          ) : <div className="empty">No receipt-to-forward pairs in the loaded transfers.</div>}
+        </div>
+        <div className="card-b" style={{ paddingTop: 0 }}><div className="dim" style={{ fontSize: 12 }}>"Rapid" means under {fmtDelta(d.thresholds.rapidMs)}. Click a row to see both transfers in the graph. Transfers in the same block show 0 s.</div></div>
       </div>
       <Method method={d.method} limits={d.limitations} />
     </div>
@@ -312,14 +334,75 @@ function IdentityView({ c, openCase }) {
   )
 }
 
+// Cross-chain status of one bridge deposit, from the registry and any destination check run in this session.
+function crossChainStatus(c, e, check) {
+  const dest = knownService(e.service)?.destination || null
+  if (c.sample) return e.trace === 'linked' ? { key: 'record', label: 'Linked by fictional record', tone: 'lilac', dest: `destination as recorded in ${e.linkedEvidence} (fictional)` } : { key: 'unconfirmed', label: 'Unconfirmed (sample)', tone: 'copper', dest: dest || 'not recorded' }
+  if (check) {
+    const m = { matched: ['confirmed', 'Confirmed match', 'teal'], ambiguous: ['ambiguous', 'Ambiguous', 'lilac'], unconfirmed: ['unconfirmed', 'Unconfirmed', 'copper'] }[check.status]
+    return { key: m[0], label: m[1], tone: m[2], dest: check.destinationChain || dest, check }
+  }
+  if (dest === 'OP Mainnet') return { key: 'unchecked', label: 'Not checked yet', tone: '', dest }
+  if (dest === 'Base') return { key: 'needs-key', label: 'Checkable with ETHERSCAN_API_KEY', tone: '', dest }
+  return { key: 'unsupported', label: 'Unsupported: no matching rule', tone: 'copper', dest: dest || 'unknown' }
+}
+
+function CrossChainSummary({ c, deposits, checks, mixers, name }) {
+  const rows = deposits.map((e) => ({ e, st: crossChainStatus(c, e, checks[e.txId]) }))
+  const count = (k) => rows.filter((x) => x.st.key === k).length
+  const live = !c.sample
+  return (
+    <div className="card">
+      <div className="card-h"><h2>Cross-chain tracing</h2><span className="dim" style={{ fontSize: 12 }}>{rows.length} bridge deposit{rows.length === 1 ? '' : 's'} · {mixers} mixer deposit{mixers === 1 ? '' : 's'} (trace stops)</span></div>
+      <div className="card-b stack" style={{ gap: 10 }}>
+        <div className="row" style={{ gap: 8 }}>
+          {live ? <>
+            <span className="pill teal">Confirmed Ethereum → Optimism: {count('confirmed')}</span>
+            <span className="pill">Not checked yet: {count('unchecked')}</span>
+            <span className="pill lilac">Ambiguous: {count('ambiguous')}</span>
+            <span className="pill copper">Unconfirmed: {count('unconfirmed')}</span>
+            <span className="pill">Needs key (Base): {count('needs-key')}</span>
+            <span className="pill copper">Unsupported bridges: {count('unsupported')}</span>
+          </> : <>
+            <span className="pill lilac">Linked by fictional record: {count('record')}</span>
+            <span className="pill copper">Unconfirmed: {count('unconfirmed')}</span>
+          </>}
+        </div>
+        {rows.length > 0 && (
+          <div className="table-wrap" style={{ maxHeight: 300 }}>
+            <table className="t">
+              <thead><tr><th>Time (UTC)</th><th>Wallet</th><th>Source → destination</th><th>Status</th><th>Confidence</th><th>Transactions</th></tr></thead>
+              <tbody>{rows.slice(0, 60).map(({ e, st }) => (
+                <tr key={e.txId} style={{ cursor: 'default' }}>
+                  <td className="mono">{fmtTime(e.ts).replace(' UTC', '')}</td><td>{name(e.wallet)}</td>
+                  <td>Ethereum → {st.dest}</td><td><span className={`pill ${st.tone}`}>{st.label}</span></td>
+                  <td>{st.check?.confidence || '—'}</td>
+                  <td className="mono" style={{ fontSize: 11.5 }}>{live && e.hash ? <a href={`https://etherscan.io/tx/${e.hash}`} target="_blank" rel="noreferrer noopener">{short(e.hash, 8)}</a> : short(e.hash || e.txId, 8)}
+                    {st.check?.candidates?.length === 1 && <> → <a href={st.check.candidates[0].url} target="_blank" rel="noreferrer noopener">{short(st.check.candidates[0].hash, 8)}</a></>}</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+        )}
+        {!rows.length && <div className="empty">{c.txs.length ? 'No bridge deposits in the loaded transfers.' : 'No transfers loaded.'}</div>}
+        <div className="dim" style={{ fontSize: 12 }}>{live
+          ? 'Only Ethereum → OP Mainnet ETH deposits through the Optimism standard bridge can be confirmed: exact amount, recipient and L2 standard-bridge sender within 60 minutes. Base uses the same rule but needs ETHERSCAN_API_KEY on the server. Other bridges have no matching rule, so their trails stay unconfirmed. Run a check with "Check destination chain" below.'
+          : 'Sample case: the bridge leg is linked only by a fictional relay record; no destination chain is queried.'}</div>
+      </div>
+    </div>
+  )
+}
+
 function ServicesView({ c, analysis, name, showTxs }) {
   const r = analysis.services
   const deposits = c.sample ? [] : r.events.filter((e) => e.kind === 'Bridge deposit' && /^0x[0-9a-f]{64}$/i.test(e.hash || ''))
+  const allDeposits = r.events.filter((e) => e.kind === 'Bridge deposit')
+  const [checks, setChecks] = useState({}) // txId -> bridge-trace result (this session)
   const TRACE = { stops: ['copper', 'Tracing stops'], uncertain: ['lilac', 'Uncertain'], linked: ['teal', 'Linked by record'] }
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <CrossChainSummary c={c} deposits={allDeposits} checks={checks} mixers={r.events.filter((e) => e.kind === 'Mixer deposit').length} name={name} />
       <div className="card">
-        <div className="card-h"><h2>Bridge and mixer interactions</h2><span className="dim" style={{ fontSize: 12 }}>{fmtUsdShort(r.totals.mixerInUsd)} into mixers · {fmtUsdShort(r.totals.bridgeOutUsd)} into bridges · {r.totals.stops} trace stop{r.totals.stops === 1 ? '' : 's'}</span></div>
+        <div className="card-h"><h2>All bridge and mixer interactions</h2><span className="dim" style={{ fontSize: 12 }}>{fmtUsdShort(r.totals.mixerInUsd)} into mixers · {fmtUsdShort(r.totals.bridgeOutUsd)} into bridges · {r.totals.stops} trace stop{r.totals.stops === 1 ? '' : 's'}</span></div>
         <div className="card-b table-wrap" style={{ maxHeight: 480 }}>
           {r.events.length ? (
             <table className="t">
@@ -335,7 +418,7 @@ function ServicesView({ c, analysis, name, showTxs }) {
         </div>
         {deposits.length > 0 && <div className="card-b stack" style={{ gap: 10, paddingTop: 0 }}>
           <div className="eyebrow">Destination-chain checks</div>
-          {deposits.map((e) => <BridgeTrace key={e.txId} e={e} name={name} />)}
+          {deposits.map((e) => <BridgeTrace key={e.txId} e={e} name={name} onResult={(res) => setChecks((m) => ({ ...m, [e.txId]: res }))} />)}
         </div>}
         {c.sample && r.events.some((e) => e.kind === 'Bridge deposit') && <div className="card-b" style={{ paddingTop: 0 }}><div className="note" style={{ fontSize: 12 }}>Sample case: the bridge leg is linked only by a fictional relay record. Live destination-chain checks run on live cases.</div></div>}
         <div className="card-b" style={{ paddingTop: 0 }}><div className="dim" style={{ fontSize: 12 }}>Basis: "registry" is a verified contract in GhostTrace's service registry; "case label" or "sample label" comes from the case data{c.sample ? ' (fictional)' : ''}. Click a row to see the transfer in the graph.</div></div>
@@ -349,7 +432,7 @@ const STATUS = { matched: ['teal', 'Destination matched'], ambiguous: ['lilac', 
 const fmtWei = (w) => { try { const b = BigInt(w); return `${(Number(b / 10n ** 12n) / 1e6).toLocaleString('en-US', { maximumFractionDigits: 6 })} ETH` } catch { return '—' } }
 
 // Asks the backend to match one Ethereum bridge deposit to its destination-chain credit.
-function BridgeTrace({ e, name }) {
+function BridgeTrace({ e, name, onResult }) {
   const { evidenceApi } = useApp()
   const [st, setSt] = useState({ state: 'idle' })
   const run = async () => {
@@ -358,7 +441,7 @@ function BridgeTrace({ e, name }) {
       const res = await fetch(`${evidenceApi}/bridge-trace?tx=${e.hash}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(60000) })
       const body = await res.json().catch(() => null)
       if (!res.ok || !body) throw new Error(body?.error?.message || `Bridge check answered ${res.status}`)
-      setSt({ state: 'done', r: body })
+      setSt({ state: 'done', r: body }); onResult?.(body)
     } catch (err) { setSt({ state: 'error', error: err.name === 'TimeoutError' ? 'the check did not finish within 60 s' : err.message }) }
   }
   const r = st.r
